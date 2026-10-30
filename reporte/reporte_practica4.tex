@@ -1,0 +1,274 @@
+\documentclass[11pt,letterpaper]{article}
+
+% ------------------------------------------------------------
+% Paquetes
+% ------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[spanish,es-tabla,es-nodecimaldot]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,babel}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\captionsetup{font=small,labelfont=rm}
+\setlength{\parskip}{0.3em}
+\setlength{\emergencystretch}{2em}
+
+% Enlace al repositorio (cambiar por la URL real)
+\newcommand{\repourl}{https://github.com/SebasDeb/practica4-uart-fpga-esp32-matlab}
+
+% ------------------------------------------------------------
+\begin{document}
+
+% ============================================================
+% Portada
+% ============================================================
+\begin{titlepage}
+\centering
+\vspace*{1.5cm}
+
+{\large Universidad de las Américas Puebla (UDLAP)\par}
+\vspace{0.3cm}
+{\large Laboratorio de Sistemas Embebidos\par}
+
+\vspace{2.5cm}
+
+{\Large\bfseries Reporte de Práctica 4\par}
+\vspace{0.6cm}
+{\LARGE Comunicación bidireccional UART entre la FPGA DE10-Lite y MATLAB
+mediante un ESP32\par}
+\vspace{0.6cm}
+{\Large Cálculo de $A^{n/2}$ en formato Q80.20\par}
+
+\vspace{2.5cm}
+
+{\large
+Abril Morales Huerta\\[0.2em]
+Anellisse Herrera Maldonado\\[0.2em]
+José Manuel Daniel\par}
+
+\vfill
+
+{\small Repositorio del proyecto:\\
+\url{\repourl}\par}
+
+\vspace{1cm}
+{\large 30 Octubre 2026\par}
+\end{titlepage}
+
+% ============================================================
+\section{Resumen de la práctica}
+% ============================================================
+
+En esta práctica diseñamos e implementamos un sistema de comunicación serial
+bidireccional entre una computadora y la tarjeta FPGA DE10-Lite. El usuario
+introduce en MATLAB una base $A$, de 0 a 255, y un exponente $n$, de 0 a 15.
+MATLAB envía ambos valores como dos bytes. Un ESP32, programado como puente
+transparente USB--UART, los reenvía a la FPGA. La FPGA calcula $A^{n/2}$ en
+formato de punto fijo Q80.20 y regresa el resultado de 100 bits dividido en
+13 bytes. Finalmente, MATLAB reconstruye el valor, lo convierte a decimal y
+lo compara con una referencia calculada por software.
+
+La comunicación utiliza 9600 baudios con formato 8N1. A partir del reloj de
+50~MHz, la FPGA cuenta $50\,000\,000/9600 \approx 5208$ ciclos por bit, lo que
+produce un error de velocidad de 0.0064\%. El ESP32 y la FPGA trabajan con
+niveles de 3.3~V, por lo que se conectan directamente: el GPIO17 del ESP32
+con la entrada RX de la FPGA, el GPIO16 con la salida TX y ambas tierras
+entre sí. La Figura~\ref{fig:arquitectura} muestra la arquitectura del
+sistema.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  font=\scriptsize,
+  blk/.style={draw,thick,rounded corners=2pt,align=center,minimum height=0.9cm,minimum width=1.9cm},
+  grp/.style={draw,dashed,rounded corners=4pt,inner sep=6pt}
+]
+  \node[blk] (pc) at (0,0) {MATLAB\\(PC)};
+  \node[blk] (esp) at (3,0) {ESP32\\UART0 / UART2};
+  \node[blk] (rx) at (6.6,1.1) {\texttt{uart\_rx}};
+  \node[blk] (tx) at (6.6,-1.1) {\texttt{uart\_tx}};
+  \node[blk] (fsm) at (9.4,0) {Control\\\texttt{top\_uart}\\\texttt{\_de10lite}};
+  \node[blk] (pot) at (12.6,0) {\texttt{potencia}\\\texttt{\_q8020}};
+  \node[grp,fit=(rx)(tx)(fsm)(pot),label={[font=\scriptsize]above:FPGA DE10-Lite (50 MHz)}] {};
+  \draw[<->,thick] (pc) -- node[above] {USB} (esp);
+  \draw[->,thick] (esp.north) |- node[pos=0.75,above] {GPIO17 (TX2)} (rx.west);
+  \draw[<-,thick] (esp.south) |- node[pos=0.75,below] {GPIO16 (RX2)} (tx.west);
+  \draw[->] (rx.east) -| node[pos=0.25,above] {byte} (fsm.north);
+  \draw[->] (fsm.south) |- node[pos=0.75,below] {byte} (tx.east);
+  \draw[->] ([yshift=2mm]fsm.east) -- node[above] {$A$, $n$} ([yshift=2mm]pot.west);
+  \draw[<-] ([yshift=-2mm]fsm.east) -- node[below] {100 bits} ([yshift=-2mm]pot.west);
+  \node[font=\scriptsize] at (3,-2) {GND común entre ESP32 y FPGA};
+\end{tikzpicture}
+\caption{Arquitectura del sistema. Elaboración propia.}
+\label{fig:arquitectura}
+\end{figure}
+
+En la FPGA organizamos el diseño en cuatro módulos Verilog. El receptor
+\texttt{uart\_rx} sincroniza la línea con dos flip-flops, confirma el bit de
+inicio a la mitad de su duración, muestrea los ocho bits de datos y descarta
+las tramas con un bit de paro inválido. El transmisor \texttt{uart\_tx} genera
+la trama 8N1 de cada byte. El módulo \texttt{potencia\_q8020} descompone el
+exponente como $n = 2k + r$ y calcula
+\begin{equation}
+A^{n/2} = A^{k}\left(\sqrt{A}\right)^{r},
+\end{equation}
+mediante $k$ multiplicaciones sucesivas y una raíz cuadrada entera de
+$A \cdot 2^{40}$, que entrega $\sqrt{A}$ con 20 bits fraccionarios. El
+cálculo tarda como máximo 9 ciclos de reloj. Por último, el módulo
+\texttt{top\_uart\_de10lite} coordina la secuencia con una máquina de
+estados: recibe $A$ y $n$, inicia el cálculo y envía los 13 bytes del
+resultado, comenzando por el menos significativo.
+
+Verificamos el módulo de cálculo en Active-HDL con un banco de pruebas
+autoverificable. Los cinco casos aplicados produjeron el valor esperado. En
+la tarjeta probamos la comunicación completa desde MATLAB. La
+Tabla~\ref{tab:resultados} muestra algunos resultados representativos.
+
+\begin{table}[H]
+\centering
+\caption{Resultados representativos del cálculo de $A^{n/2}$.}
+\label{tab:resultados}
+\small
+\begin{tabular}{@{}rrrrr@{}}
+\toprule
+$A$ & $n$ & \textbf{Valor exacto} & \textbf{Resultado Q80.20} & \textbf{Error relativo} \\
+\midrule
+4   & 3  & 8           & 8           & 0 \\
+100 & 4  & 10\,000     & 10\,000     & 0 \\
+2   & 1  & 1.414213562 & 1.414213181 & $2.7\times10^{-7}$ \\
+10  & 5  & 316.2277660 & 316.2277222 & $1.4\times10^{-7}$ \\
+255 & 15 & $1.119570259\times10^{18}$ & $1.119570197\times10^{18}$ & $5.6\times10^{-8}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Con exponentes pares, el resultado es exacto. Con exponentes impares, la
+raíz se trunca a 20 bits fraccionarios, por lo que el error relativo es
+menor que $1/(\sqrt{2}\cdot2^{20}) \approx 6.7\times10^{-7}$. Cada operación
+completa tarda aproximadamente 15.6~ms, casi todo debido a la transmisión
+serial.
+
+La práctica nos permitió comprobar la importancia de que todos los
+elementos usen el mismo baud rate, la utilidad del ESP32 como sustituto de
+un convertidor USB--UART dedicado y las ventajas de MATLAB para generar
+casos de prueba y validar resultados. El código fuente, las simulaciones, la
+documentación técnica completa, las capturas y el video de funcionamiento se
+encuentran en el repositorio del proyecto:
+
+\begin{center}
+\url{\repourl}
+\end{center}
+
+% ============================================================
+\section{Cuestionario}
+% ============================================================
+
+\begin{enumerate}
+  \item \textbf{¿Qué diferencia existe entre UART y RS232?}
+
+  UART es el bloque que implementa la comunicación serial asíncrona: define la
+  trama, con sus bits de inicio, datos, paridad y paro, y trabaja con los
+  niveles lógicos del circuito, como 3.3~V en nuestro caso.
+
+  RS232 es un estándar eléctrico y de interfaz. Define niveles de voltaje,
+  conectores y señales de control. Utiliza voltajes positivos y negativos,
+  típicamente entre $\pm3$ y $\pm15$~V, con lógica invertida: el 1 lógico
+  corresponde a un voltaje negativo \cite{ti232}. Una UART puede usarse con
+  RS232 agregando un transceptor que convierta los niveles.
+
+  \item \textbf{¿Por qué no debe conectarse directamente una señal RS232
+  clásica a un pin GPIO de la FPGA?}
+
+  Los pines de la DE10-Lite que utilizamos operan con 3.3~V \cite{de10}. Una
+  señal RS232 puede alcanzar voltajes de varios volts, positivos y negativos,
+  que superan los límites del pin y pueden dañar la FPGA. Además, su lógica
+  invertida no corresponde a la que espera nuestro receptor. Por ello, se
+  requiere un convertidor de niveles. En nuestro sistema, el ESP32 y la FPGA
+  trabajan con los mismos niveles, por lo que no fue necesario.
+
+  \item \textbf{¿Qué función cumple el baud rate en una comunicación serial?}
+
+  Define el número de símbolos transmitidos por segundo y, por tanto, la
+  duración de cada bit. Como no existe un reloj compartido, el receptor usa
+  esa duración para saber en qué momento muestrear cada bit después del bit
+  de inicio. Si las velocidades no coinciden, el error se acumula a lo largo
+  de la trama y el receptor puede leer un bit equivocado \cite{brown}.
+
+  En nuestro diseño, 9600 baudios corresponden a 5208 ciclos de 50~MHz por
+  bit, con un error de 0.0064\%.
+
+  \item \textbf{¿Por qué la conexión entre TX y RX debe realizarse cruzada?}
+
+  TX es una salida que transmite y RX es una entrada que recibe. Al conectar
+  el TX de un dispositivo con el RX del otro, cada transmisor tiene un
+  receptor que lo escucha. Si se conectara TX con TX, dos salidas manejarían
+  la misma línea y ningún dispositivo recibiría los datos. En nuestro sistema,
+  el GPIO17 del ESP32 se conecta a la entrada RX de la FPGA y el GPIO16 a su
+  salida TX.
+
+  \item \textbf{¿Qué ventajas ofrece MATLAB para la prueba de sistemas
+  embebidos con comunicación serial?}
+
+  El objeto \texttt{serialport} permite abrir el puerto, configurar el tiempo
+  límite, limpiar el búfer, enviar y leer bytes con pocas instrucciones
+  \cite{matlab}. Además, MATLAB permite automatizar casos de prueba, validar
+  las entradas, procesar los datos recibidos y compararlos con valores de
+  referencia.
+
+  En esta práctica, la aritmética simbólica nos permitió reconstruir un
+  resultado de 100 bits sin pérdida de precisión.
+
+  \item \textbf{¿Qué función cumple el ESP32 dentro del sistema de
+  comunicación propuesto?}
+
+  Funciona como un puente transparente USB--UART \cite{esp32}. Recibe por USB
+  los bytes que envía MATLAB y los retransmite a la FPGA por su UART2. En
+  sentido contrario, recibe la respuesta de la FPGA y la reenvía a la
+  computadora. Así, MATLAB se comunica con la FPGA como si estuviera conectada
+  a un puerto serial, sin requerir un convertidor USB--UART dedicado.
+\end{enumerate}
+
+% ============================================================
+\begin{thebibliography}{9}
+% ============================================================
+
+\bibitem{mano}
+M. M. Mano, \textit{Diseño digital}, versión en español proporcionada para
+consulta.
+
+\bibitem{de10}
+Terasic, \textit{DE10-Lite User Manual}, Jun. 2020.
+
+\bibitem{esp32}
+Espressif Systems, \textit{ESP32 Technical Reference Manual}, capítulo UART
+Controller. [Online]. Available:
+\url{https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf}
+
+\bibitem{matlab}
+MathWorks, \textit{serialport: Connection to serial port}, documentación de
+MATLAB. [Online]. Available:
+\url{https://www.mathworks.com/help/matlab/ref/serialport.html}
+
+\bibitem{brown}
+S. Brown y Z. Vranesic, \textit{Fundamentals of Digital Logic with Verilog
+Design}, 3rd ed. New York, NY, USA: McGraw-Hill, 2014.
+
+\bibitem{ti232}
+Texas Instruments, \textit{Interface Circuits for TIA/EIA-232-F}, Application
+Report SLLA037.
+
+\end{thebibliography}
+
+\end{document}
