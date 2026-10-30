@@ -4,7 +4,7 @@ Cálculo de $A^{n/2}$ en punto fijo **Q80.20** dentro de una FPGA MAX 10, con MA
 
 **Universidad de las Américas Puebla (UDLAP)**, Laboratorio de Sistemas Embebidos
 
-**Equipo:** Abril Morales Huerta · Anellisse Herrera Maldonado · José Manuel Daniel
+**Equipo:** Abril Morales Huerta · Anellisse Herrera Maldonado · José Manuel Daniel Morales
 
 ![Verilog](https://img.shields.io/badge/HDL-Verilog-blue)
 ![FPGA](https://img.shields.io/badge/FPGA-DE10--Lite%20MAX%2010-0071C5)
