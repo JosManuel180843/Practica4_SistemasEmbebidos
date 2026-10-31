@@ -557,7 +557,7 @@ El banco de pruebas [`sim/tb_potencia_q8020.v`](sim/tb_potencia_q8020.v) usa un 
 | 4 | 7 | 128 | 134 217 728 | 5 |
 | 2 | 0 | 1 | 1 048 576 | 2 |
 
-![Simulación en Active-HDL](docs/img/sim1.png)
+![Simulación en Active-HDL](/img/sim1.jpeg)
 
 Salida de la consola del simulador (la simulación termina a los 580 ns):
 
