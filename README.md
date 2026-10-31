@@ -195,7 +195,7 @@ flowchart LR
 
 El recorrido de los datos es el siguiente: `uart_rx` entrega cada byte con un pulso en `rx_done`. La FSM principal guarda el primer byte como A y el segundo como n, y activa `calc_start`. Cuando llega `calc_done`, copia el resultado en `result_reg` y lo envía byte por byte con `uart_tx`.
 
-![Diagrama RTL generado en Quartus](docs/img/rtl.png)
+📄 [Ver diagrama RTL (PDF)](img/RTL.practica4.pdf)
 
 ### 3.3 Asignación de entradas y salidas
 
