@@ -569,15 +569,12 @@ OK A=4 n=7 Q=134217728
 OK A=2 n=0 Q=1048576
 ```
 
-### 4.2 Carga del programa en el ESP32
-
-![Carga del programa en Arduino IDE](docs/img/arduino_carga.png)
 
 ### 4.3 Conexión física
 
 El GPIO17 del ESP32 va a `UART_RX`, el GPIO16 a `UART_TX`, y las dos tarjetas comparten GND. El ESP32 se conecta a la computadora por USB.
 
-![Conexión ESP32 – DE10-Lite](docs/img/conexion_fisica.jpg)
+![Conexión ESP32 – DE10-Lite](docs/img/conexionfisica.jpeg)
 
 ### 4.4 Pruebas desde MATLAB
 
