@@ -605,7 +605,7 @@ Resultado decimal: 316.2277221679688
 Referencia MATLAB: 316.227766
 ```
 
-![Consola de MATLAB](docs/img/matlab_consola1.jpeg)
+![Consola de MATLAB](img/matlab_consola1.jpeg)
 
 ![Consola de MATLAB con casos adicionales](docs/img/matlab_consola2.jpeg)
 
