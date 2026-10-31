@@ -574,7 +574,7 @@ OK A=2 n=0 Q=1048576
 
 El GPIO17 del ESP32 va a `UART_RX`, el GPIO16 a `UART_TX`, y las dos tarjetas comparten GND. El ESP32 se conecta a la computadora por USB.
 
-![Conexión ESP32 – DE10-Lite](docs/img/conexionfisica.jpeg)
+![Conexión ESP32 – DE10-Lite](img/conexionfisica.jpeg)
 
 ### 4.4 Pruebas desde MATLAB
 
