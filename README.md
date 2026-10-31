@@ -606,11 +606,7 @@ Referencia MATLAB: 316.227766
 
 ![Consola de MATLAB con casos adicionales](img/matlab_consola_2.jpeg)
 
-### 4.5 Video de funcionamiento
 
-_(agregar enlace)_
-
----
 
 ## 5. Análisis de resultados
 
